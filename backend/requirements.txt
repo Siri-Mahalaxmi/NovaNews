@@ -1,0 +1,12 @@
+# --- Core Backend ---
+fastapi
+uvicorn
+supabase
+python-dotenv
+requests
+pydantic
+
+# --- AI & Machine Learning ---
+sentence-transformers
+numpy
+scikit-learn
