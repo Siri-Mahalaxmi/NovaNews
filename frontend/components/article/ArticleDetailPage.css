@@ -1,0 +1,232 @@
+/* Article Detail Page Styles */
+.article-detail-page {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  min-height: 100vh;
+  padding: 40px 24px;
+}
+
+.article-detail-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 800px;
+  gap: 32px;
+}
+
+/* Back Button */
+.article-back-btn-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background-color: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  font-size: 0.9375rem;
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  transition: background-color 0.2s;
+  align-self: flex-start;
+}
+
+.article-back-btn-top:hover {
+  background-color: var(--bg-tertiary);
+}
+
+/* Article Header */
+.article-header {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.article-category-badge {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 8px 16px;
+  background-color: var(--accent-primary);
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  font-weight: var(--font-weight-semibold);
+  color: white;
+}
+
+.article-title {
+  font-size: 2.5rem;
+  font-weight: var(--font-weight-extrabold);
+  line-height: 1.2;
+  letter-spacing: -0.03em;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.article-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.article-source {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.article-source-name {
+  font-size: 1rem;
+  font-weight: var(--font-weight-semibold);
+  color: var(--accent-primary);
+}
+
+.article-author {
+  font-size: 0.9375rem;
+  color: var(--text-secondary);
+}
+
+.article-meta-separator {
+  color: var(--text-muted);
+}
+
+.article-timestamp {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+/* Featured Image */
+.article-image-container {
+  width: 100%;
+  height: 450px;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background-color: var(--bg-tertiary);
+}
+
+.article-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Article Content */
+.article-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.article-description {
+  font-size: 1.25rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-medium);
+  padding: 20px;
+  background-color: var(--bg-secondary);
+  border-left: 4px solid var(--accent-primary);
+  border-radius: var(--radius-sm);
+}
+
+.article-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.article-paragraph {
+  font-size: 1.0625rem;
+  line-height: 1.8;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+/* Article Footer */
+.article-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 32px;
+  margin-top: 32px;
+  border-top: 1px solid var(--border-color);
+}
+
+.article-source-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  background-color: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  font-size: 1rem;
+  font-weight: var(--font-weight-medium);
+  color: var(--accent-primary);
+  transition: background-color 0.2s;
+  text-decoration: none;
+  align-self: flex-start;
+}
+
+.article-source-link:hover {
+  background-color: var(--bg-tertiary);
+}
+
+/* Loading and Error States */
+.article-loading,
+.article-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+  text-align: center;
+  width: 100%;
+}
+
+.article-loading p {
+  font-size: 1.125rem;
+  color: var(--text-secondary);
+}
+
+.article-error p {
+  font-size: 1.125rem;
+  color: var(--text-secondary);
+  margin-bottom: 20px;
+}
+
+.article-back-btn {
+  padding: 12px 28px;
+  font-size: 1rem;
+  font-weight: var(--font-weight-semibold);
+  background-color: var(--accent-primary);
+  color: white;
+  border-radius: var(--radius-md);
+  transition: background-color 0.2s;
+}
+
+.article-back-btn:hover {
+  background-color: var(--accent-hover);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .article-detail-page {
+    padding: 24px 16px;
+  }
+  
+  .article-title {
+    font-size: 1.875rem;
+  }
+  
+  .article-image-container {
+    height: 300px;
+  }
+  
+  .article-description {
+    font-size: 1.125rem;
+    padding: 16px;
+  }
+  
+  .article-paragraph {
+    font-size: 1rem;
+  }
+}
