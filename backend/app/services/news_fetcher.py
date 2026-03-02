@@ -59,11 +59,11 @@ def fetch_and_store_news(category="technology"):
             # Insert into Supabase
             try:
                 # We use .insert() to add the row
-                supabase.table("articles").insert(new_article).execute()
+                supabase.table("articles").upsert(new_article).execute()
                 stored_count += 1
             except Exception as e:
                 # If duplicate or error, just print and continue
-                print(f"Internal insert error (might be duplicate): {str(e)}")
+                print(f"Internal upsert error (might be duplicate): {str(e)}")
 
         return {"status": "success", "stored": stored_count, "category": category}
 

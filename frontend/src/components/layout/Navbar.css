@@ -1,0 +1,57 @@
+.navbar {
+  height: 64px;
+  width: 200vh;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 40px;
+  background: #0f1117;
+  color: white;
+}
+
+.logo a {
+  text-decoration: none;
+  color: white;
+  font-weight: 600;
+  font-size: 18px;
+}
+
+.nav-links {
+  display: flex;
+  gap: 30px;
+}
+
+.nav-links a {
+  text-decoration: none;
+  color: #aaa;
+  font-weight: 500;
+}
+
+.nav-links a:hover {
+  color: white;
+}
+
+.nav-links .active {
+  color: white;
+  border-bottom: 2px solid white;
+  padding-bottom: 4px;
+}
+
+.auth-links {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+}
+
+.auth-links a {
+  text-decoration: none;
+  color: #ccc;
+}
+
+.signup-btn {
+  padding: 6px 14px;
+  background: white;
+  color: black !important;
+  border-radius: 20px;
+  font-weight: 600;
+}
