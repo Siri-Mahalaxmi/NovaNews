@@ -1,13 +1,15 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from supabase import create_client
 from pydantic import BaseModel
-import os
-from dotenv import load_dotenv
+from typing import Optional
+from app.db import supabase
+from app.services.news_fetcher import fetch_and_store_news
+from app.services.vectorizer import process_new_articles
+from app.ml.recommender import get_recommendations, calculate_user_embedding
 
-load_dotenv()
 
-app = FastAPI()
+app = FastAPI(title="NovaNews Backend")
+
 
 # -------------------- CORS --------------------
 app.add_middleware(
@@ -17,12 +19,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# -------------------- Supabase Setup --------------------
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 
 # -------------------- Models --------------------
@@ -35,20 +31,19 @@ class InteractionRequest(BaseModel):
 # -------------------- Root --------------------
 @app.get("/")
 def root():
-    return {"message": "NovaNews API running"}
+    return {"status": "active", "message": "NovaNews API is running"}
 
 
 # -------------------- Get All Articles --------------------
 @app.get("/articles")
-def get_articles(category: str = "All"):
+def get_articles(category: Optional[str] = "All"):
     try:
         query = supabase.table("articles").select("*")
 
-        if category != "All":
+        if category and category.lower() != "all":
             query = query.eq("category", category.lower())
 
         response = query.order("published_at", desc=True).execute()
-
         return response.data
 
     except Exception as e:
@@ -68,33 +63,89 @@ def get_article(article_id: int):
             .execute()
         )
 
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Article not found")
+
         return response.data
 
-    except Exception:
-        raise HTTPException(status_code=404, detail="Article not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # -------------------- Log Interaction --------------------
 @app.post("/interact")
 def log_interaction(data: InteractionRequest):
     try:
-        response = supabase.table("interactions").insert({
+        print(f">>> RECEIVED: user={data.user_id}, article={data.article_id}, type={data.interaction_type}")
+        
+        response = supabase.table("interactions").upsert({
             "user_id": data.user_id,
             "article_id": data.article_id,
             "interaction_type": data.interaction_type
-        }).execute()
+        }, on_conflict="user_id,article_id,interaction_type").execute()
 
+        print(f">>> SUPABASE RESPONSE: {response}")
+        print(f">>> RESPONSE DATA: {response.data}")
+        
         return {"status": "success", "message": "Interaction logged"}
 
     except Exception as e:
+        print(f">>> FULL ERROR: {repr(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# -------------------- Get User Interactions --------------------
+# Returns sets of liked and saved article IDs for a user
+# Used by frontend to restore like/save state on page load
+@app.get("/interactions/{user_id}")
+def get_user_interactions(user_id: str):
+    try:
+        response = (
+            supabase
+            .table("interactions")
+            .select("article_id, interaction_type")
+            .eq("user_id", user_id)
+            .in_("interaction_type", ["like", "save"])
+            .execute()
+        )
+
+        liked = []
+        saved = []
+
+        for row in response.data:
+            if row["interaction_type"] == "like":
+                liked.append(row["article_id"])
+            elif row["interaction_type"] == "save":
+                saved.append(row["article_id"])
+
+        # Deduplicate in case of duplicates before unique index was enforced
+        return {
+            "liked": list(set(liked)),
+            "saved": list(set(saved))
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# -------------------- Trigger News Fetch --------------------
+@app.post("/update-news/{category}")
+def trigger_news_update(category: str):
+    return fetch_and_store_news(category)
+
+
+# -------------------- Trigger ML Vector Processing --------------------
+@app.post("/trigger-ml")
+def trigger_ml_processing():
+    return process_new_articles()
 
 
 # -------------------- Recommend Articles --------------------
 @app.get("/recommend/{user_id}")
 def recommend(user_id: str):
     try:
-        # Check if user has interactions
         interactions = (
             supabase
             .table("interactions")
@@ -103,34 +154,66 @@ def recommend(user_id: str):
             .execute()
         ).data
 
-        # If no history → return latest articles
+        # No history → return latest articles
         if not interactions:
-            response = (
+            return (
                 supabase
                 .table("articles")
                 .select("*")
                 .order("published_at", desc=True)
                 .limit(20)
                 .execute()
-            )
-            return response.data
+            ).data
 
-        # Get liked article IDs
-        liked_ids = [i["article_id"] for i in interactions]
+        article_ids = [i["article_id"] for i in interactions]
 
-        # Fetch articles matching same categories as liked ones
+        # Attempt ML vector-based recommendations
+        liked_embeddings_data = (
+            supabase
+            .table("article_embeddings")
+            .select("embedding")
+            .in_("article_id", article_ids)
+            .execute()
+        ).data
+
+        if liked_embeddings_data:
+            liked_vectors = [x["embedding"] for x in liked_embeddings_data]
+            user_vector = calculate_user_embedding(liked_vectors)
+
+            all_embeddings = (
+                supabase
+                .table("article_embeddings")
+                .select("*")
+                .execute()
+            ).data
+
+            recommendations = get_recommendations(user_vector, all_embeddings, top_k=10)
+
+            if recommendations:
+                rec_ids = [r["article_id"] for r in recommendations]
+                unsorted_articles = (
+                    supabase
+                    .table("articles")
+                    .select("*")
+                    .in_("id", rec_ids)
+                    .execute()
+                ).data
+
+                article_map = {a["id"]: a for a in unsorted_articles}
+                return [article_map[rid] for rid in rec_ids if rid in article_map]
+
+        # Fallback → category-based recommendations
         liked_articles = (
             supabase
             .table("articles")
             .select("category")
-            .in_("id", liked_ids)
+            .in_("id", article_ids)
             .execute()
         ).data
 
         liked_categories = list(set([a["category"] for a in liked_articles]))
 
-        # Fetch articles from same categories
-        response = (
+        return (
             supabase
             .table("articles")
             .select("*")
@@ -138,12 +221,361 @@ def recommend(user_id: str):
             .order("published_at", desc=True)
             .limit(20)
             .execute()
-        )
-
-        return response.data
+        ).data
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+
+
+
+
+
+
+# from fastapi import FastAPI, HTTPException
+# from fastapi.middleware.cors import CORSMiddleware
+# from pydantic import BaseModel
+# from typing import Optional
+# from app.db import supabase
+# from app.services.news_fetcher import fetch_and_store_news
+# from app.services.vectorizer import process_new_articles
+# from app.ml.recommender import get_recommendations, calculate_user_embedding
+
+
+# app = FastAPI(title="NovaNews Backend")
+
+
+# # -------------------- CORS --------------------
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=["*"],
+#     allow_credentials=True,
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )
+
+
+# # -------------------- Models --------------------
+# class InteractionRequest(BaseModel):
+#     user_id: str
+#     article_id: int
+#     interaction_type: str
+
+
+# # -------------------- Root --------------------
+# @app.get("/")
+# def root():
+#     return {"status": "active", "message": "NovaNews API is running"}
+
+
+# # -------------------- Get All Articles --------------------
+# @app.get("/articles")
+# def get_articles(category: Optional[str] = "All"):
+#     try:
+#         query = supabase.table("articles").select("*")
+
+#         if category and category.lower() != "all":
+#             query = query.eq("category", category.lower())
+
+#         response = query.order("published_at", desc=True).execute()
+
+#         return response.data
+
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
+
+
+# # -------------------- Get Single Article --------------------
+# @app.get("/articles/{article_id}")
+# def get_article(article_id: int):
+#     try:
+#         response = (
+#             supabase
+#             .table("articles")
+#             .select("*")
+#             .eq("id", article_id)
+#             .single()
+#             .execute()
+#         )
+
+#         if not response.data:
+#             raise HTTPException(status_code=404, detail="Article not found")
+
+#         return response.data
+
+#     except HTTPException:
+#         raise
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
+
+
+# # -------------------- Log Interaction --------------------
+# @app.post("/interact")
+# def log_interaction(data: InteractionRequest):
+#     try:
+#         response = supabase.table("interactions").insert({
+#             "user_id": data.user_id,
+#             "article_id": data.article_id,
+#             "interaction_type": data.interaction_type
+#         }).execute()
+
+#         return {"status": "success", "message": "Interaction logged"}
+
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
+
+
+# # -------------------- Trigger News Fetch --------------------
+# @app.post("/update-news/{category}")
+# def trigger_news_update(category: str):
+#     return fetch_and_store_news(category)
+
+
+# # -------------------- Trigger ML Vector Processing --------------------
+# @app.post("/trigger-ml")
+# def trigger_ml_processing():
+#     return process_new_articles()
+
+
+# # -------------------- Recommend Articles --------------------
+# @app.get("/recommend/{user_id}")
+# def recommend(user_id: str):
+#     try:
+#         interactions = (
+#             supabase
+#             .table("interactions")
+#             .select("article_id")
+#             .eq("user_id", user_id)
+#             .execute()
+#         ).data
+
+#         # No history → return latest articles
+#         if not interactions:
+#             return (
+#                 supabase
+#                 .table("articles")
+#                 .select("*")
+#                 .order("published_at", desc=True)
+#                 .limit(20)
+#                 .execute()
+#             ).data
+
+#         article_ids = [i["article_id"] for i in interactions]
+
+#         # Attempt ML vector-based recommendations
+#         liked_embeddings_data = (
+#             supabase
+#             .table("article_embeddings")
+#             .select("embedding")
+#             .in_("article_id", article_ids)
+#             .execute()
+#         ).data
+
+#         if liked_embeddings_data:
+#             liked_vectors = [x["embedding"] for x in liked_embeddings_data]
+#             user_vector = calculate_user_embedding(liked_vectors)
+
+#             all_embeddings = (
+#                 supabase
+#                 .table("article_embeddings")
+#                 .select("*")
+#                 .execute()
+#             ).data
+
+#             recommendations = get_recommendations(user_vector, all_embeddings, top_k=10)
+
+#             if recommendations:
+#                 rec_ids = [r["article_id"] for r in recommendations]
+#                 unsorted_articles = (
+#                     supabase
+#                     .table("articles")
+#                     .select("*")
+#                     .in_("id", rec_ids)
+#                     .execute()
+#                 ).data
+
+#                 article_map = {a["id"]: a for a in unsorted_articles}
+#                 return [article_map[rid] for rid in rec_ids if rid in article_map]
+
+#         # Fallback → category-based recommendations
+#         liked_articles = (
+#             supabase
+#             .table("articles")
+#             .select("category")
+#             .in_("id", article_ids)
+#             .execute()
+#         ).data
+
+#         liked_categories = list(set([a["category"] for a in liked_articles]))
+
+#         return (
+#             supabase
+#             .table("articles")
+#             .select("*")
+#             .in_("category", liked_categories)
+#             .order("published_at", desc=True)
+#             .limit(20)
+#             .execute()
+#         ).data
+
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
+
+
+
+
+
+
+# from fastapi import FastAPI, HTTPException
+# from fastapi.middleware.cors import CORSMiddleware
+# from supabase import create_client
+# from pydantic import BaseModel
+# import os
+# from dotenv import load_dotenv
+
+# load_dotenv()
+
+# app = FastAPI()
+
+# # -------------------- CORS --------------------
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=["*"],
+#     allow_credentials=True,
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )
+
+# # -------------------- Supabase Setup --------------------
+# SUPABASE_URL = os.getenv("SUPABASE_URL")
+# SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+# supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+
+# # -------------------- Models --------------------
+# class InteractionRequest(BaseModel):
+#     user_id: str
+#     article_id: int
+#     interaction_type: str
+
+
+# # -------------------- Root --------------------
+# @app.get("/")
+# def root():
+#     return {"message": "NovaNews API running"}
+
+
+# # -------------------- Get All Articles --------------------
+# @app.get("/articles")
+# def get_articles(category: str = "All"):
+#     try:
+#         query = supabase.table("articles").select("*")
+
+#         if category != "All":
+#             query = query.eq("category", category.lower())
+
+#         response = query.order("published_at", desc=True).execute()
+
+#         return response.data
+
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
+
+
+# # -------------------- Get Single Article --------------------
+# @app.get("/articles/{article_id}")
+# def get_article(article_id: int):
+#     try:
+#         response = (
+#             supabase
+#             .table("articles")
+#             .select("*")
+#             .eq("id", article_id)
+#             .single()
+#             .execute()
+#         )
+
+#         return response.data
+
+#     except Exception:
+#         raise HTTPException(status_code=404, detail="Article not found")
+
+
+# # -------------------- Log Interaction --------------------
+# @app.post("/interact")
+# def log_interaction(data: InteractionRequest):
+#     try:
+#         response = supabase.table("interactions").insert({
+#             "user_id": data.user_id,
+#             "article_id": data.article_id,
+#             "interaction_type": data.interaction_type
+#         }).execute()
+
+#         return {"status": "success", "message": "Interaction logged"}
+
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
+
+
+# # -------------------- Recommend Articles --------------------
+# @app.get("/recommend/{user_id}")
+# def recommend(user_id: str):
+#     try:
+#         # Check if user has interactions
+#         interactions = (
+#             supabase
+#             .table("interactions")
+#             .select("article_id")
+#             .eq("user_id", user_id)
+#             .execute()
+#         ).data
+
+#         # If no history → return latest articles
+#         if not interactions:
+#             response = (
+#                 supabase
+#                 .table("articles")
+#                 .select("*")
+#                 .order("published_at", desc=True)
+#                 .limit(20)
+#                 .execute()
+#             )
+#             return response.data
+
+#         # Get liked article IDs
+#         liked_ids = [i["article_id"] for i in interactions]
+
+#         # Fetch articles matching same categories as liked ones
+#         liked_articles = (
+#             supabase
+#             .table("articles")
+#             .select("category")
+#             .in_("id", liked_ids)
+#             .execute()
+#         ).data
+
+#         liked_categories = list(set([a["category"] for a in liked_articles]))
+
+#         # Fetch articles from same categories
+#         response = (
+#             supabase
+#             .table("articles")
+#             .select("*")
+#             .in_("category", liked_categories)
+#             .order("published_at", desc=True)
+#             .limit(20)
+#             .execute()
+#         )
+
+#         return response.data
+
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
+
+
+
 
 
 
@@ -303,7 +735,7 @@ def recommend(user_id: str):
 #             "article_id": data.article_id,
 #             "interaction_type": data.interaction_type
 #         }
-
+   
 #         response = supabase.table("interactions").insert(interaction_entry).execute()
 
 #         return {"status": "success", "data": response.data}

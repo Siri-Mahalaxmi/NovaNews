@@ -27,10 +27,13 @@ const LoginPage = () => {
   };
 
   const handleGoogleLogin = async () => {
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-    });
-  };
+  await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo: "http://localhost:5173/"  // ✅ add this
+    }
+  });
+};
 
   return (
     <div className="auth-page">

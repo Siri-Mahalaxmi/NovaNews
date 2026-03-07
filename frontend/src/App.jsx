@@ -21,22 +21,23 @@ function AppWrapper() {
   const location = useLocation();
 
   useEffect(() => {
-    const checkUser = async () => {
-      const { data } = await supabase.auth.getUser();
-      setUser(data?.user || null);
-      setLoading(false);
-    };
+  const checkUser = async () => {
+    // ✅ getSession() instead of getUser() — correctly picks up OAuth redirect tokens
+    const { data } = await supabase.auth.getSession();
+    setUser(data?.session?.user || null);
+    setLoading(false);
+  };
 
-    checkUser();
+  checkUser();
 
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setUser(session?.user || null);
-      }
-    );
+  const { data: listener } = supabase.auth.onAuthStateChange(
+    (_event, session) => {
+      setUser(session?.user || null);
+    }
+  );
 
-    return () => listener.subscription.unsubscribe();
-  }, []);
+  return () => listener.subscription.unsubscribe();
+}, []);
 
   if (loading) return null;
 

@@ -1,47 +1,51 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import NewsCard from "./NewsCard";
 import SearchBar from "./SearchBar";
 import CategoryTabs from "./CategoryTabs";
 import "./ExplorePage.css";
 
+const API_BASE = "http://127.0.0.1:5000";
+
 const ExplorePage = ({ user }) => {
   const navigate = useNavigate();
+  const userRef = useRef(user);
 
   const [articles, setArticles] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [likedIds, setLikedIds] = useState(new Set());
+  const [savedIds, setSavedIds] = useState(new Set());
 
-  const categories = [
-    "All",
-    "Technology",
-    "Global",
-    "Finance",
-    "Science",
-    "Security"
-  ];
+  const categories = ["All", "Technology", "Global", "Finance", "Science", "Security"];
 
-  // 🔥 Fetch Personalized Recommendations
-  const fetchRecommendations = async () => {
-    if (!user?.id) {
-      console.log("User not ready yet");
-      return;
+  // Keep ref in sync with latest user
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
+  // -------------------- Fetch Past Interactions --------------------
+  const fetchUserInteractions = async (userId) => {
+    try {
+      const response = await fetch(`${API_BASE}/interactions/${userId}`);
+      if (!response.ok) return;
+      const data = await response.json();
+      setLikedIds(new Set(data.liked));
+      setSavedIds(new Set(data.saved));
+    } catch (err) {
+      console.error("Failed to fetch user interactions:", err);
     }
+  };
 
+  // -------------------- Fetch Recommendations --------------------
+  const fetchRecommendations = async (userId) => {
     setLoading(true);
     setError(null);
-
     try {
-      const response = await fetch(
-        `http://127.0.0.1:5000/recommend/${user.id}`
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch recommendations");
-      }
-
+      const response = await fetch(`${API_BASE}/recommend/${userId}`);
+      if (!response.ok) throw new Error("Failed to fetch recommendations");
       const data = await response.json();
       setArticles(data);
     } catch (err) {
@@ -53,61 +57,65 @@ const ExplorePage = ({ user }) => {
   };
 
   useEffect(() => {
-    fetchRecommendations();
-  }, [user]);
+    if (user?.id) {
+      fetchUserInteractions(user.id);
+      fetchRecommendations(user.id);
+    }
+  }, [user?.id]);
 
-  // 🔥 Log Interaction
-  const handleArticleInteraction = useCallback(
-    async (articleId, interactionType) => {
-      if (!user?.id) return;
+  // -------------------- Log Interaction --------------------
+  const handleArticleInteraction = async (articleId, interactionType) => {
+    const currentUser = userRef.current;
+    if (!currentUser?.id) return;
 
-      try {
-        await fetch("http://127.0.0.1:5000/interact", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            user_id: user.id,
-            article_id: articleId,
-            interaction_type: interactionType
-          })
-        });
+    // Optimistic UI update
+    if (interactionType === "like") {
+      setLikedIds((prev) => new Set([...prev, articleId]));
+    } else if (interactionType === "unlike") {
+      setLikedIds((prev) => { const n = new Set(prev); n.delete(articleId); return n; });
+    } else if (interactionType === "save") {
+      setSavedIds((prev) => new Set([...prev, articleId]));
+    } else if (interactionType === "unsave") {
+      setSavedIds((prev) => { const n = new Set(prev); n.delete(articleId); return n; });
+    }
 
-        // Refresh recommendations after interaction
-        fetchRecommendations();
-      } catch (error) {
-        console.error("Interaction logging failed:", error);
+    try {
+      const response = await fetch(`${API_BASE}/interact`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: currentUser.id,
+          article_id: articleId,
+          interaction_type: interactionType,
+        }),
+      });
+
+      const result = await response.json();
+      console.log("Interaction result:", result);
+
+      if (interactionType === "like") {
+        fetchRecommendations(currentUser.id);
       }
-    },
-    [user]
-  );
+    } catch (err) {
+      console.error("Interaction logging failed:", err);
+    }
+  };
 
+  // -------------------- Navigation --------------------
   const handleArticleClick = (articleId) => {
     handleArticleInteraction(articleId, "view");
     navigate(`/article/${articleId}`);
   };
 
-  const handleSearchChange = (query) => {
-    setSearchQuery(query);
-  };
-
-  const handleCategoryChange = (category) => {
-    setActiveCategory(category);
-  };
-
+  // -------------------- Filtering --------------------
   const filteredArticles = articles
     .filter((article) => {
       if (activeCategory === "All") return true;
-      return (
-        article.category?.toLowerCase() === activeCategory.toLowerCase()
-      );
+      return article.category?.toLowerCase() === activeCategory.toLowerCase();
     })
     .filter((article) => {
       if (!searchQuery.trim()) return true;
-
       const query = searchQuery.toLowerCase();
-
       return (
         article.title?.toLowerCase().includes(query) ||
         article.description?.toLowerCase().includes(query) ||
@@ -117,7 +125,6 @@ const ExplorePage = ({ user }) => {
 
   return (
     <div className="explore-page">
-
       <div className="explore-header">
         <h1>Explore</h1>
       </div>
@@ -125,7 +132,7 @@ const ExplorePage = ({ user }) => {
       <div className="explore-search">
         <SearchBar
           value={searchQuery}
-          onChange={handleSearchChange}
+          onChange={setSearchQuery}
           placeholder="Search personalized news..."
         />
       </div>
@@ -134,7 +141,7 @@ const ExplorePage = ({ user }) => {
         <CategoryTabs
           categories={categories}
           activeCategory={activeCategory}
-          onCategoryChange={handleCategoryChange}
+          onCategoryChange={setActiveCategory}
         />
       </div>
 
@@ -159,6 +166,8 @@ const ExplorePage = ({ user }) => {
                 article={article}
                 onClick={handleArticleClick}
                 onInteraction={handleArticleInteraction}
+                initialLiked={likedIds.has(article.id)}
+                initialSaved={savedIds.has(article.id)}
               />
             ))
           ) : (
