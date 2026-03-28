@@ -1,31 +1,49 @@
+// NewsCard.jsx
 import React, { useState } from "react";
 import "./NewsCard.css";
 
-// initialLiked / initialSaved come from ExplorePage which fetches
-// the user's past interactions on load — so state persists across reloads
-const NewsCard = ({ article, onClick, onInteraction, initialLiked = false, initialSaved = false }) => {
-  const [isLiked, setIsLiked] = useState(initialLiked);   // ✅ seeded from backend
-  const [isSaved, setIsSaved] = useState(initialSaved);   // ✅ seeded from backend
+const NewsCard = ({
+  article,
+  onClick,
+  onInteraction,
+  initialLiked = false,
+  initialSaved = false,
+  initialDisliked = false,
+}) => {
+  const [isLiked, setIsLiked] = useState(initialLiked);
+  const [isSaved, setIsSaved] = useState(initialSaved);
+  const [isDisliked, setIsDisliked] = useState(initialDisliked);
   const [shareMsg, setShareMsg] = useState(null);
 
-  // -------------------- Like --------------------
+  // ── Like ────────────────────────────────────────────────────────────────
   const handleLike = (e) => {
-  e.stopPropagation();
-  console.log("1. LIKE CLICKED - article id:", article.id);
-  console.log("2. onInteraction prop:", onInteraction);
-  
-  const newState = !isLiked;
-  setIsLiked(newState);
+    e.stopPropagation();
+    const newState = !isLiked;
+    setIsLiked(newState);
 
-  if (onInteraction) {
-    console.log("3. CALLING onInteraction");
-    onInteraction(article.id, newState ? "like" : "unlike");
-  } else {
-    console.log("3. onInteraction IS NULL/UNDEFINED - prop not passed");
-  }
-};
+    // Liking removes any dislike
+    if (newState && isDisliked) setIsDisliked(false);
 
-  // -------------------- Save --------------------
+    if (onInteraction) {
+      onInteraction(article.id, newState ? "like" : "unlike");
+    }
+  };
+
+  // ── Dislike ─────────────────────────────────────────────────────────────
+  const handleDislike = (e) => {
+    e.stopPropagation();
+    const newState = !isDisliked;
+    setIsDisliked(newState);
+
+    // Disliking removes any like
+    if (newState && isLiked) setIsLiked(false);
+
+    if (onInteraction) {
+      onInteraction(article.id, newState ? "dislike" : "unlike");
+    }
+  };
+
+  // ── Save ─────────────────────────────────────────────────────────────────
   const handleSave = (e) => {
     e.stopPropagation();
     const newState = !isSaved;
@@ -36,13 +54,11 @@ const NewsCard = ({ article, onClick, onInteraction, initialLiked = false, initi
     }
   };
 
-  // -------------------- Share --------------------
+  // ── Share ─────────────────────────────────────────────────────────────────
   const handleShare = async (e) => {
     e.stopPropagation();
-
     const url = article.url || window.location.href;
 
-    // Native share sheet (mobile / desktop where supported)
     if (navigator.share) {
       try {
         await navigator.share({ title: article.title, text: article.description, url });
@@ -53,12 +69,10 @@ const NewsCard = ({ article, onClick, onInteraction, initialLiked = false, initi
       return;
     }
 
-    // Clipboard fallback
     try {
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(url);
       } else {
-        // Legacy HTTP fallback
         const el = document.createElement("textarea");
         el.value = url;
         el.style.cssText = "position:fixed;opacity:0";
@@ -93,11 +107,24 @@ const NewsCard = ({ article, onClick, onInteraction, initialLiked = false, initi
         <p>{article.description}</p>
 
         <div className="news-actions">
-          <button onClick={handleLike}>
+          <button
+            onClick={handleLike}
+            className={isLiked ? "liked" : ""}
+          >
             {isLiked ? "❤️ Liked" : "🤍 Like"}
           </button>
 
-          <button onClick={handleSave}>
+          <button
+            onClick={handleDislike}
+            className={isDisliked ? "disliked" : ""}
+          >
+            {isDisliked ? "👎 Disliked" : "👎 Dislike"}
+          </button>
+
+          <button
+            onClick={handleSave}
+            className={isSaved ? "saved" : ""}
+          >
             {isSaved ? "🔖 Saved" : "💾 Save"}
           </button>
 
@@ -111,6 +138,127 @@ const NewsCard = ({ article, onClick, onInteraction, initialLiked = false, initi
 };
 
 export default NewsCard;
+
+
+
+
+
+
+
+// //NewsCard.jsx
+// import React, { useState } from "react";
+// import "./NewsCard.css";
+
+// // initialLiked / initialSaved come from ExplorePage which fetches
+// // the user's past interactions on load — so state persists across reloads
+// const NewsCard = ({ article, onClick, onInteraction, initialLiked = false, initialSaved = false }) => {
+//   const [isLiked, setIsLiked] = useState(initialLiked);   // ✅ seeded from backend
+//   const [isSaved, setIsSaved] = useState(initialSaved);   // ✅ seeded from backend
+//   const [shareMsg, setShareMsg] = useState(null);
+
+//   // -------------------- Like --------------------
+//   const handleLike = (e) => {
+//   e.stopPropagation();
+//   console.log("1. LIKE CLICKED - article id:", article.id);
+//   console.log("2. onInteraction prop:", onInteraction);
+  
+//   const newState = !isLiked;
+//   setIsLiked(newState);
+
+//   if (onInteraction) {
+//     console.log("3. CALLING onInteraction");
+//     onInteraction(article.id, newState ? "like" : "unlike");
+//   } else {
+//     console.log("3. onInteraction IS NULL/UNDEFINED - prop not passed");
+//   }
+// };
+
+//   // -------------------- Save --------------------
+//   const handleSave = (e) => {
+//     e.stopPropagation();
+//     const newState = !isSaved;
+//     setIsSaved(newState);
+
+//     if (onInteraction) {
+//       onInteraction(article.id, newState ? "save" : "unsave");
+//     }
+//   };
+
+//   // -------------------- Share --------------------
+//   const handleShare = async (e) => {
+//     e.stopPropagation();
+
+//     const url = article.url || window.location.href;
+
+//     // Native share sheet (mobile / desktop where supported)
+//     if (navigator.share) {
+//       try {
+//         await navigator.share({ title: article.title, text: article.description, url });
+//         if (onInteraction) onInteraction(article.id, "share");
+//       } catch (err) {
+//         if (err.name !== "AbortError") console.error("Share failed:", err);
+//       }
+//       return;
+//     }
+
+//     // Clipboard fallback
+//     try {
+//       if (navigator.clipboard?.writeText) {
+//         await navigator.clipboard.writeText(url);
+//       } else {
+//         // Legacy HTTP fallback
+//         const el = document.createElement("textarea");
+//         el.value = url;
+//         el.style.cssText = "position:fixed;opacity:0";
+//         document.body.appendChild(el);
+//         el.focus();
+//         el.select();
+//         document.execCommand("copy");
+//         document.body.removeChild(el);
+//       }
+
+//       if (onInteraction) onInteraction(article.id, "share");
+//       setShareMsg("Copied!");
+//       setTimeout(() => setShareMsg(null), 2000);
+//     } catch (err) {
+//       console.error("Clipboard copy failed:", err);
+//       setShareMsg("Failed");
+//       setTimeout(() => setShareMsg(null), 2000);
+//     }
+//   };
+
+//   return (
+//     <div className="news-card" onClick={() => onClick(article.id)}>
+//       <img
+//         src={article.image_url || "https://placehold.co/400x300?text=No+Image"}
+//         alt={article.title}
+//         className="news-image"
+//         onError={(e) => { e.target.src = "https://placehold.co/400x300?text=No+Image"; }}
+//       />
+
+//       <div className="news-content">
+//         <h3>{article.title}</h3>
+//         <p>{article.description}</p>
+
+//         <div className="news-actions">
+//           <button onClick={handleLike}>
+//             {isLiked ? "❤️ Liked" : "🤍 Like"}
+//           </button>
+
+//           <button onClick={handleSave}>
+//             {isSaved ? "🔖 Saved" : "💾 Save"}
+//           </button>
+
+//           <button onClick={handleShare}>
+//             {shareMsg ?? "📤 Share"}
+//           </button>
+//         </div>
+//       </div>
+//     </div>
+//   );
+// };
+
+// export default NewsCard;
 
 
 

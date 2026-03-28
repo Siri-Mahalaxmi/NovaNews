@@ -1,3 +1,97 @@
+/* Navbar.css */
+.navbar {
+  height: 64px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 40px;
+  background: #0f1117;
+  color: white;
+  box-sizing: border-box;
+}
+
+.nav-left .logo {
+  text-decoration: none;
+  color: white;
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: -0.02em;
+}
+
+/* ── Centre nav links ── */
+.nav-center {
+  display: flex;
+  gap: 36px;        /* was missing — this adds proper spacing between Home / Explore / Profile */
+  align-items: center;
+}
+
+.nav-center a {
+  text-decoration: none;
+  color: #aaa;
+  font-weight: 500;
+  font-size: 15px;
+  padding-bottom: 4px;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.nav-center a:hover {
+  color: white;
+}
+
+.nav-center a.active {
+  color: white;
+  border-bottom: 2px solid white;
+}
+
+/* ── Right side ── */
+.nav-right {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+}
+
+.nav-right a {
+  text-decoration: none;
+  color: #ccc;
+}
+
+.user-email {
+  font-size: 13px;
+  color: #aaa;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logout-btn {
+  padding: 6px 14px;
+  background: transparent;
+  color: #ccc;
+  border: 1px solid #333;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.logout-btn:hover {
+  background: #1e293b;
+  color: white;
+}
+
+.signup-btn {
+  padding: 6px 14px;
+  background: white;
+  color: black !important;
+  border-radius: 20px;
+  font-weight: 600;
+}
+
+/*NavBar.css
 .navbar {
   height: 64px;
   width: 200vh;
@@ -54,4 +148,4 @@
   color: black !important;
   border-radius: 20px;
   font-weight: 600;
-}
+}*/
